@@ -1,0 +1,150 @@
+[
+  {
+    "selector": "edge",
+    "style": {
+      "curve-style": "bezier",
+      "color": "black",
+      "line-color": "black",
+      "font-size": "7px",
+      "font-weight": 100,
+      "width": "1px",
+      "target-endpoint": "outside-to-node-or-label",
+      "source-endpoint": "outside-to-node-or-label",
+      "target-distance-from-node": "3px",
+      "source-distance-from-node": "3px",
+      "visibility": "visible",
+      "label": ""
+    }
+  },
+  {
+    "selector": "edge:selected",
+    "style": {
+      "width": "3px",
+      "label": "data(name)",
+      "text-background-color": "#CCC",
+      "text-background-opacity": ".8",
+      "text-border-opacity": 1,
+      "text-border-width": "5px",
+      "text-border-color": "#CCC",
+      "line-color": "red"
+    }
+  },
+  {
+    "selector": "edge .highlighted",
+    "style": {
+      "line-color": "red",
+      "width": "3px",
+      "label": "data(name)",
+      "text-background-color": "#CCC",
+      "text-background-opacity": ".8",
+      "text-border-opacity": 1,
+      "text-border-width": "5px",
+      "text-border-color": "#CCC",
+      "arrow-scale": 1,
+      "source-arrow-color": "red",
+      "target-arrow-color": "red"
+    }
+  },
+  {
+    "selector": ".edge-hover",
+    "style": {
+      "line-color": "green",
+      "width": "3px",
+      "label": "data(name)",
+      "text-background-color": "#CCC",
+      "text-background-opacity": ".8",
+      "text-border-opacity": 1,
+      "text-border-width": "5px",
+      "text-border-color": "#CCC"
+    }
+  },
+  {
+   "selector": "node",
+    "style": {
+      "border-color": "black",
+      "border-opacity": 1,
+      "border-width": 1,
+      "color": "black",
+      "font-size": 8,
+      "label": "data(name)",
+      "min-zoomed-font-size": 6,
+      "opacity": 1,
+      "text-halign": "center",
+      "text-valign" : "bottom",
+      "visibility": "visible"
+    }
+  },
+  {
+    "selector": "node[type=\"Person\"]",
+    "style": {
+      "background-image": "data(icon_url)",
+      "background-fit": "contain",
+      "width": 50,
+      "height": 50,
+      "shape": "ellipse"
+    }
+  },
+  {
+    "selector": "node:selected",
+    "style": {
+      "background-blacken": "-.25",
+      "border-color": "blue",
+      "border-width": 1
+    }
+  },
+
+  {
+    "selector": "node[type=\"Section\"]",
+    "style": {
+      "background-color": "#E5EFE5",
+      "shape": "polygon",
+      "shape-polygon-points": "-.7, -1,   .4, -1,  .7, -.7,  .7, .9,   -.7, .9"
+    }
+  },
+  {
+    "selector": "node[type=\"Section\"]:selected",
+    "style": {
+      "background-blacken": "-.25",
+      "border-color": "blue",
+      "border-width": 1
+    }
+  },
+    {
+    "selector": "node .highlighted",
+    "style": {
+      "background-blacken": "-.25",
+      "text-border-color": "red",
+      "border-color": "red",
+      "border-width": 2
+    }
+  },
+  {
+    "selector": ".node-hover",
+    "style": {
+      "background-blacken": "-.25",
+      "border-color": "green",
+      "border-width": 2
+    }
+  },
+  {
+    "selector": "edge[type=\"Section_RelatesTo_Section\"]",
+    "style": {
+      "source-arrow-shape": "triangle",
+      "target-arrow-shape": "triangle",
+      "source-arrow-color": "black",
+      "target-arrow-color": "black",
+      "arrow-scale": ".5"
+    }
+  },
+  {
+    "selector": "edge[type=\"Section_RelatesTo_Section\"] .edge-hover",
+    "style": {
+      "source-arrow-shape": "triangle",
+      "target-arrow-shape": "triangle",
+      "arrow-scale": ".75",
+      "line-color": "blue",
+      "source-arrow-color": "green",
+      "target-arrow-color": "green"
+    }
+  }
+]
