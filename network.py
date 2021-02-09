@@ -1,18 +1,14 @@
 import networkx as nx
 from pprint import pprint
 import time
-import mwclient
+
 from urllib.parse import unquote
 from common import *
 import dill as pickle
 from pathlib import Path
 import re
 
-wpu_url = "https://wpu.nu/"
-wpu_mainspace_url = wpu_url + "wiki/"
-wpu_sectionspace_url = wpu_mainspace_url + "Uppslag:"
-wpu = mwclient.Site('wpu.nu', scheme='https', path='/', retry_timeout="180")
-wpu.login(wpu_username, wpu_password)
+
 
 def wpu_fold_name(name):
   return name.replace(" ", "_")
@@ -51,6 +47,25 @@ def get_person_icon_url(person):
 
 
   return unquote(icon_file.imageinfo["url"])
+
+
+@cache.memoize(timeout=3600)
+def node_exists_in_wpu(node_name):
+
+  queries = [f"[[{node_name}]] [[Kategori:Person]]",
+             f"[[{node_name}]] [[Kategori:Uppslag]]"]
+
+  for query in queries:
+    results = wpu.raw_api('ask', query=f"{query}|limit=100", http_method='GET')
+    wpu.handle_api_result(results)  # raises APIError on error
+
+    answers = results['query'].get('results')
+    for answer in answers:
+      if answer == node_name:
+        return True
+
+  return False
+
 
 
 @cache.memoize(timeout=3600)

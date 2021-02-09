@@ -12,6 +12,13 @@ from bot_pass import *
 # wpu_username="Botten Anna@OCRBOT"
 # wpu_password="password"
 
+import mwclient
+wpu_url = "https://wpu.nu/"
+wpu_mainspace_url = wpu_url + "wiki/"
+wpu_sectionspace_url = wpu_mainspace_url + "Uppslag:"
+wpu = mwclient.Site('wpu.nu', scheme='https', path='/', retry_timeout="180")
+wpu.login(wpu_username, wpu_password)
+
 queries = {
   "Person": {
     "query": f"[[Kategori:Person]] | ?=Person",

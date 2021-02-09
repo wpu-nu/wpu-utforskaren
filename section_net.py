@@ -10,6 +10,7 @@ from pprint import pprint
 import networkx as nx
 from network import *
 from functools import partial
+from html import unescape
 
 with open("styles.json", "rb") as file:
   stylesheet = json.load(file)
@@ -143,8 +144,8 @@ app.layout = dbc.Container(children=[
       dbc.Col([
           dbc.InputGroup(
             [
-            dbc.Input(id='add-node-text-input', value="", placeholder="Person:Stig Engström"),
-            dbc.Button("Lägg till", id="add-node-button"),
+            dbc.Input(id='search-text-input', value="", placeholder="Stig Engström"),
+            dbc.Button("Sök", id="search-button"),
             ])
         ], width=3,
         className="m-0 p-2"
@@ -199,10 +200,97 @@ app.layout = dbc.Container(children=[
     html.Div(id='add-node-signal', children="", hidden=True),
     html.Div(id='add-node-nbrs-signal', children="", hidden=True),
     dcc.Location(id='url', refresh=False),
+    dbc.Modal([
+      dbc.ModalHeader("Sökresultat"),
+      dbc.ModalBody(children=[
+        html.Div("Här visas endast de sökträffar som går att lägga till. Det betyder att det måste finnas en uppslagssida eller personsida."),
+        html.Hr(),
+        html.Div(id="search-results-area", children=[])
+      ]),
+      dbc.ModalFooter(dbc.Button("Stäng", id="close-search-results-modal", className="ml-auto"))
+    ],
+    id="search-results-modal",
+    size="lg",
+    ),
   ],
   fluid=True,
   className="m-0 p-0"
 )
+
+
+
+@app.callback([Output("search-results-modal", "is_open"),
+              Output("search-results-area", "children")],
+             [Input("close-search-results-modal", "n_clicks"),
+              Input("search-button", "n_clicks")],
+              State("search-text-input", "value"))
+def search_results_modal(close_clicks, search_clicks, search_text):
+  print("search_results_modal")
+
+  ctx = dash.callback_context
+  if not ctx.triggered:
+    return dash.no_update
+
+  button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+
+  if button_id == "close-search-results-modal":
+    return [False, ""]
+  elif button_id == "search-button" and len(search_text.strip().strip(".-:,")) > 0:
+    net = get_wpu_connectome_nx()
+    max_results = 10
+    results_layout = []
+    for result in wpu.search(search_text, limit=100):
+      if node_exists_in_wpu(result['title']):
+        snippet = unescape(result["snippet"].replace('<span class="searchmatch">', "").replace("</span>", ""))
+        results_layout.append(html.Div([
+            html.A(href=f"https://wpu.nu/wiki/{result['title']}", target="_blank", children=result['title']),
+            html.I(children=html.P(children=snippet)),
+            dbc.Button("Lägg till", id={'role': "add-search-result-button", 'name': result['title']} , className="btn btn-primary btn-sm"),
+            html.Hr()
+          ]))
+        if len(results_layout) > 10:
+          break
+    return [True, results_layout]
+  else:
+    return [False, dash.no_update]
+
+
+@app.callback(Output('add-node-signal', 'children'),
+  [
+    Input({'role': 'add-this-node-button', 'node': ALL}, 'n_clicks'),
+    Input({"role": "add-search-result-button", "name": ALL}, "n_clicks"),
+  ])
+def add_node_click(add_this_node, add_searched_node):
+  # Adds node :)
+  # The dynamic left hand toolbox adds a bit of complexity here
+  ctx = dash.callback_context
+  if not ctx.triggered:
+    return dash.no_update
+  button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+
+  if "add-this-node-button" in button_id:
+    button_id = json.loads(button_id)
+    if "role" in button_id and button_id["role"] == "add-this-node-button":
+      if len(set(add_this_node)) == 1 and add_this_node[0] is None: # disable triggering on creation
+        return dash.no_update
+      else:
+        return button_id["node"]
+    else:
+      return dash.no_update
+
+  elif "add-search-result-button" in button_id:
+    button_id = json.loads(button_id)
+    if "name" in button_id and button_id["role"] == "add-search-result-button":
+      if len(set(add_searched_node)) == 1 and add_searched_node[0] is None: # disable triggering on creation
+        return dash.no_update
+      else:
+        return add_type(button_id["name"])
+    else:
+      return dash.no_update
+  else:
+    return dash.no_update
+
+
 
 
 @app.callback(
@@ -540,38 +628,6 @@ def add_type(node_text):
         node_type = "Person"
   return node_type + ":" + node_name
 
-
-@app.callback(Output('add-node-signal', 'children'),
-  [
-    Input('add-node-button', 'n_clicks'),
-    Input({'role': 'add-this-node-button', 'node': ALL}, 'n_clicks'),
-  ],
-  [
-    State('add-node-text-input', 'value')
-  ])
-def add_node_click(add_node_button_clicks, add_this_node, node_text):
-  # Adds node :)
-  # The dynamic left hand toolbox adds a bit of complexity here
-  ctx = dash.callback_context
-  if not ctx.triggered:
-    return dash.no_update
-
-  button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-
-  if "add-this-node-button" in button_id:
-    button_id = json.loads(button_id)
-    if "role" in button_id and button_id["role"] == "add-this-node-button":
-      if len(set(add_this_node)) == 1 and add_this_node[0] is None: # disable triggering on creation
-        return dash.no_update
-      else:
-        return button_id["node"]
-    else:
-      return dash.no_update
-
-  if add_node_button_clicks is None or add_node_button_clicks < 1:
-    return dash.no_update
-
-  return add_type(node_text)
 
 
 @app.callback(Output('add-node-nbrs-signal', 'children'),
