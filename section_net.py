@@ -197,6 +197,7 @@ app.layout = dbc.Container(children=[
     #   ]
     # ),
     html.Div(id='add-node-signal', children="", hidden=True),
+    html.Div(id='add-node-nbrs-signal', children="", hidden=True),
     dcc.Location(id='url', refresh=False),
   ],
   fluid=True,
@@ -371,12 +372,13 @@ def display_cyto(hover_node, hover_edge, timestamp, local_store_data, elements):
 @app.callback(
     Output(component_id='local-store', component_property='data'),
    [Input(component_id='add-node-signal', component_property='children'),
+    Input(component_id='add-node-nbrs-signal', component_property='children'),
     Input(component_id='url', component_property='pathname'),
     Input(component_id='cytoscape-net', component_property='tapEdgeData')],
     State(component_id='local-store', component_property='modified_timestamp'),
     State(component_id='local-store', component_property='data')
    ) # @cache.memoize(timeout=7200)
-def add_nodes(node_to_add, url, tapped_edge, local_store_timestamp, local_store_data):
+def add_nodes(node_to_add, node_to_add_nbrs, url, tapped_edge, local_store_timestamp, local_store_data):
 
   # Add nodes from various inputs, outputs to local store that in turn triggers display cyto
 
@@ -399,6 +401,20 @@ def add_nodes(node_to_add, url, tapped_edge, local_store_timestamp, local_store_
   if trigger_id == "add-node-signal":
     local_store_data["include"]["nodes"].append(node_to_add)
 
+  elif trigger_id == "add-node-nbrs-signal":
+    print(f"Neighbouring nodes to {node_to_add_nbrs}")
+    mg = get_wpu_connectome_nx()
+    for n in mg.neighbors(node_to_add_nbrs):
+      print("Adding:")
+      pprint(n)
+      local_store_data["include"]["nodes"].append(n)
+      esd = mg[node_to_add_nbrs][n]
+      for ed in esd.values():
+        pprint(ed)
+        local_store_data["include"]["edges"].append(ed["id"])
+
+
+
   elif trigger_id == "url":
     m = re.match(r"/(\w+)/([\w-]+:)?([\w-]+)/?", url)
     if m:
@@ -415,6 +431,7 @@ def add_nodes(node_to_add, url, tapped_edge, local_store_timestamp, local_store_
       if action == "add":
         local_store_data["include"]["nodes"].append(typed_name)
         local_store_data["include"]["nodes"] == list(set(local_store_data["include"]["nodes"]))
+
 
 
   elif trigger_id == "cytoscape-net":
@@ -455,8 +472,8 @@ def node_selected(tapped_node, local_store_data):
         children=[
           html.A(href=tapped_node["url"], target="_blank", children=html.H3(tapped_node["name"])),
           html.Br(),
-          html.Div(id="add-all-nbrs-data", hidden=True, children=tapped_node["id"]),
-          dbc.Button("Lägg till allt", className="btn-sm align-self-end", style={"padding": "2px"}, id="add-all-nbrs-button"),
+          html.Div(id={'role': "add-all-nbrs-data"}, hidden=True, children=tapped_node["id"]),
+          dbc.Button("Lägg till allt", className="btn-sm align-self-end", style={"padding": "2px"}, id={'role': 'add-all-nbrs-button'}),
           ]
         )
     ]
@@ -527,9 +544,11 @@ def add_type(node_text):
 @app.callback(Output('add-node-signal', 'children'),
   [
     Input('add-node-button', 'n_clicks'),
-    Input({'role': 'add-this-node-button', 'node': ALL}, 'n_clicks')
+    Input({'role': 'add-this-node-button', 'node': ALL}, 'n_clicks'),
   ],
-  State('add-node-text-input', 'value'))
+  [
+    State('add-node-text-input', 'value')
+  ])
 def add_node_click(add_node_button_clicks, add_this_node, node_text):
   # Adds node :)
   # The dynamic left hand toolbox adds a bit of complexity here
@@ -555,14 +574,38 @@ def add_node_click(add_node_button_clicks, add_this_node, node_text):
   return add_type(node_text)
 
 
+@app.callback(Output('add-node-nbrs-signal', 'children'),
+    Input({'role': 'add-all-nbrs-button'}, 'n_clicks'),
+    State({'role': 'add-all-nbrs-data'}, 'children'),
+  )
+def add_node_nbrs_click(add_all_neighbours_clicks, add_all_neighbours_data):
+  print("add_node_nbrs_click")
+  ctx = dash.callback_context
+  if not ctx.triggered:
+    return dash.no_update
+
+  button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+  print(button_id)
+
+  if add_all_neighbours_clicks is None or add_all_neighbours_clicks < 1:
+    return dash.no_update
+
+  if button_id == '{"role":"add-all-nbrs-button"}':
+    if add_all_neighbours_data != "":
+      print(f"Add all neighbours to {add_all_neighbours_data}")
+      return add_all_neighbours_data
+
+  return dash.no_update
+
+
 @app.callback(Output('wpu-page-preview', 'src'),
               Input('cytoscape-net', 'tapNodeData'))
 def display_tap_node_data(data):
   # Show right hand side iframe
   if data is None:
-    return "https://wpu.nu/wiki/wpu-utredaren"
+    return "https://wpu.nu/wiki/wpu-utforskaren"
   if 'url' not in data:
-    return "https://wpu.nu/wiki/wpu-utredaren"
+    return "https://wpu.nu/wiki/wpu-utforskaren"
   return data['url']
 
 
