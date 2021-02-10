@@ -6,14 +6,18 @@ import dash_html_components as html
 from dash.exceptions import PreventUpdate
 import json
 import re
-from pprint import pprint
+from pprint import pprint, pformat
 import networkx as nx
 from network import *
 from functools import partial
 from html import unescape
+import datetime
+import urllib
+import base64
 
 with open("styles.json", "rb") as file:
   stylesheet = json.load(file)
+print(__file__)
 pprint(stylesheet)
 
 app.layout = dbc.Container(children=[
@@ -27,7 +31,7 @@ app.layout = dbc.Container(children=[
             "borderColor": "black",
             "borderStyle": "solid",
             "borderWidth": "1px",
-            "height": "95vh",
+            "height": "90vh",
             "margin": "0px",
             "paddingLeft": "8px",
             "paddingRight": "0px",
@@ -65,7 +69,7 @@ app.layout = dbc.Container(children=[
                   },
                 stylesheet=stylesheet,
                 style={
-                        'height': '95vh',
+                        'height': '90vh',
                         "width": "auto",
                         "borderWidth": "0px",
                         "padding": "0px",
@@ -85,7 +89,7 @@ app.layout = dbc.Container(children=[
       dbc.Col([
         html.Iframe(id="wpu-page-preview",
           style={
-                  'height': '95vh',
+                  'height': '90vh',
                   "borderWidth": "0px",
                   "maxWidth": "550px",
                   "minWidth": "400px",
@@ -151,7 +155,19 @@ app.layout = dbc.Container(children=[
         className="m-0 p-2"
       ),
       dbc.Col(children=[
-                dbc.Button("Radera sparat", id="delete-local-storage-button", className="btn btn-warning btn-sm")
+                html.A(id='download-network', download="network-data.json", href="", target="_blank", hidden=False,
+                  children=[
+                    dbc.Button("Spara nätverk", id="export-network-button", className="btn btn-primary btn-sm m-1 p-1"),
+                  ]
+                ),
+                dcc.Upload(
+                  id='upload-network',
+                  children=[
+                    dbc.Button("Öppna nätverk", id="load-network-button", className="btn btn-primary btn-sm m-1 p-1")
+                  ]
+                ),
+
+                dbc.Button("Radera nätverk", id="delete-local-storage-button", className="btn btn-warning btn-sm m-1 p-1")
         ],
         width=1,
         className="m-0 p-2"
@@ -181,13 +197,27 @@ app.layout = dbc.Container(children=[
                   ),
                 ],
                 size="sm",
+                className="m-1 p-1",
               ),
-              ],
-
-        width=3,
-        className="m-0 p-2"),
+              dbc.InputGroup(
+                [
+                  dbc.InputGroupAddon("Spara bild", addon_type="prepend"),
+                    dbc.DropdownMenu([
+                      dbc.DropdownMenuItem('PNG', id={'role': 'export-image', 'type': 'png'}),
+                      dbc.DropdownMenuItem('JPG', id={'role': 'export-image', 'type': 'jpg'}),
+                      dbc.DropdownMenuItem('SVG', id={'role': 'export-image', 'type': 'svg'}),
+                    ],
+                    label="PNG",
+                    direction="up",
+                    id='export-image-select',
+                    ),
+                ]),
+          ],
+          width=3,
+        className="m-0 p-2"
+        ),
       dbc.Col([
-        dbc.Button("Dölj wpu-artiklar", id="hide-wpu-preview-button", className="btn btn-primary btn-sm")
+        dbc.Button("Dölj wpu-artiklar", id="hide-wpu-preview-button", className="btn btn-primary btn-sm m-1 p-1")
       ],
       width=1,
       className="m-0 p-2"
@@ -217,6 +247,24 @@ app.layout = dbc.Container(children=[
   className="m-0 p-0"
 )
 
+@app.callback(Output("cytoscape-net", "generateImage"),
+              Input({'role': "export-image", 'type': ALL}, "n_clicks"))
+def generate_image(n_clicks):
+  ctx = dash.callback_context
+  if not ctx.triggered:
+    return dash.no_update
+
+  button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+  prop_id = ctx.triggered[0]['prop_id'].split('.')[1]
+  button_id = json.loads(button_id)
+  if "role" in button_id and button_id["role"] == "export-image":
+    filename = "wpu-utforskaren_" + datetime.datetime.now().strftime("%Y-%m-%d_%H%M")
+    return {"type": button_id["type"], "action": "download", "filename": filename}
+
+  return dash.no_update
+
+
+
 
 
 @app.callback([Output("search-results-modal", "is_open"),
@@ -225,7 +273,7 @@ app.layout = dbc.Container(children=[
               Input("search-button", "n_clicks")],
               State("search-text-input", "value"))
 def search_results_modal(close_clicks, search_clicks, search_text):
-  print("search_results_modal")
+  print(__file__, "search_results_modal")
 
   ctx = dash.callback_context
   if not ctx.triggered:
@@ -337,7 +385,7 @@ def set_cyto_layout(
   if not ctx.triggered:
     return [layout, label]
 
-  print(ctx.triggered[0]['prop_id'].split('.')[0])
+  print(__file__, ctx.triggered[0]['prop_id'].split('.')[0])
   layout["name"] = ctx.triggered[0]['prop_id'].split('.')[0].replace("layout-algo-select-", "")
   if layout["name"] == "cola":
     layout["convergenceThreshold"] = 0.0
@@ -352,6 +400,17 @@ def set_cyto_layout(
   label = layout["name"]
 
   return [layout, label]
+
+
+def get_network_download_data(data):
+  d = json.dumps(data, indent=2, sort_keys=True, ensure_ascii=False)
+  return "data:application/json;charset=utf-8," + urllib.parse.quote(d)
+
+@app.callback(Output(component_id='download-network', component_property='download'),
+              Input(component_id='download-network', component_property='href'))
+def update_download_network_filename(href):
+  filename = "wpu-utforskaren_" + datetime.datetime.now().strftime("%Y-%m-%d_%H%M") + ".json"
+  return filename
 
 
 def filter_edges(local_store_data, n1, n2, n3):
@@ -369,14 +428,17 @@ def filter_nodes(local_store_data, n):
   # matches the nodes in local store with nodes in nx
   return local_store_data is not None and "include" in local_store_data and "nodes" in local_store_data["include"] and n in local_store_data["include"]["nodes"]
 
-
-@app.callback(Output('cytoscape-net', 'elements'),
+@app.callback(
+            [Output('cytoscape-net', 'elements'),
+            Output(component_id='download-network', component_property='href')],
             [Input('cytoscape-net', 'mouseoverNodeData'),
              Input('cytoscape-net', 'mouseoverEdgeData'),
-             Input('local-store', 'modified_timestamp')],
+             Input('local-store', 'clear_data'),
+             Input('local-store', 'modified_timestamp')
+             ],
              [State('local-store', 'data'),
               State('cytoscape-net', 'elements')])
-def display_cyto(hover_node, hover_edge, timestamp, local_store_data, elements):
+def display_cyto(hover_node, hover_edge, clear_data, timestamp, local_store_data, elements):
   # Handles display of network.
   # Filters out nodes present in local store from nx
   # Changes style on mouse over
@@ -384,13 +446,13 @@ def display_cyto(hover_node, hover_edge, timestamp, local_store_data, elements):
 
   ctx = dash.callback_context
   if not ctx.triggered:
-    return elements
+    return [elements, get_network_download_data(local_store_data)]
   trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
   trigger_prop = ctx.triggered[0]['prop_id'].split('.')[1]
-  print(f"{ctx.triggered[0]=}")
+  print(__file__, f"{ctx.triggered[0]=}")
   if trigger_id == "cytoscape-net":
     if trigger_prop == "mouseoverNodeData":
-      #print(f"{hover_node=}")
+      #print(__file__, f"{hover_node=}")
       for idx, node in enumerate(elements["nodes"]):
         if "classes" not in elements["nodes"][idx]:
           elements["nodes"][idx]["classes"] = ""
@@ -411,7 +473,7 @@ def display_cyto(hover_node, hover_edge, timestamp, local_store_data, elements):
 
 
     elif trigger_prop == "mouseoverEdgeData":
-      #print(f"{hover_edge=}")
+      #print(__file__, f"{hover_edge=}")
       for idx, node in enumerate(elements["nodes"]):
         if "classes" not in elements["nodes"][idx]:
           elements["nodes"][idx]["classes"] = ""
@@ -430,20 +492,20 @@ def display_cyto(hover_node, hover_edge, timestamp, local_store_data, elements):
           elements["edges"][idx]["classes"] = elements["edges"][idx]["classes"].replace(" edge-hover", "")
 
 
-    return elements
+    return [elements, get_network_download_data(local_store_data)]
 
 
-  if timestamp == -1:
-    return dash.no_update
+  if  trigger_prop != "clear_data" and timestamp == -1:
+    return [dash.no_update,  get_network_download_data(local_store_data)]
   mg = get_wpu_connectome_nx()
 
 
   mg_filtered = nx.classes.graphviews.subgraph_view(mg, filter_node=partial(filter_nodes, local_store_data), filter_edge=partial(filter_edges, local_store_data))
-  print(f"Investigation network size: {mg.number_of_nodes()} nodes and {mg.number_of_edges()} edges")
-  print(f"Display network size: {mg_filtered.number_of_nodes()} nodes and {mg_filtered.number_of_edges()} edges")
+  print(__file__, f"Investigation network size: {mg.number_of_nodes()} nodes and {mg.number_of_edges()} edges")
+  print(__file__, f"Display network size: {mg_filtered.number_of_nodes()} nodes and {mg_filtered.number_of_edges()} edges")
 
   m = nx.readwrite.json_graph.cytoscape_data(mg_filtered)
-  if "highlight" in local_store_data:
+  if type(local_store_data) == dict and "highlight" in local_store_data:
     for idx, edge in enumerate(m["elements"]["edges"]):
 
       if edge["data"]["id"] in local_store_data["highlight"]["edges"]:
@@ -452,23 +514,42 @@ def display_cyto(hover_node, hover_edge, timestamp, local_store_data, elements):
         m["elements"]["edges"][idx]["classes"] = ""
 
 
-  return m["elements"]
+  return [m["elements"],  get_network_download_data(local_store_data)]
 
 
 
 
 @app.callback(
-    Output(component_id='local-store', component_property='data'),
+   Output(component_id='local-store', component_property='data'),
    [Input(component_id='add-node-signal', component_property='children'),
     Input(component_id='add-node-nbrs-signal', component_property='children'),
     Input(component_id='url', component_property='pathname'),
-    Input(component_id='cytoscape-net', component_property='tapEdgeData')],
+    Input(component_id='cytoscape-net', component_property='tapEdgeData'),
+    Input(component_id='upload-network', component_property='contents'),
+    Input(component_id='upload-network', component_property='last_modified')],
     State(component_id='local-store', component_property='modified_timestamp'),
     State(component_id='local-store', component_property='data')
    ) # @cache.memoize(timeout=7200)
-def add_nodes(node_to_add, node_to_add_nbrs, url, tapped_edge, local_store_timestamp, local_store_data):
+def add_nodes(node_to_add, node_to_add_nbrs, url, tapped_edge, uploaded_data, upload_timestamp, local_store_timestamp, local_store_data):
 
   # Add nodes from various inputs, outputs to local store that in turn triggers display cyto
+
+  ctx = dash.callback_context
+  if not ctx.triggered:
+    return dash.no_update
+  trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+  trigger_prop = ctx.triggered[0]['prop_id'].split('.')[1]
+
+  print("add_nodes")
+  pprint(ctx)
+  if trigger_id == "upload-network":
+    print("Loading network from file")
+    pprint(uploaded_data)
+    data = uploaded_data.split(',')[-1]
+    pprint(data)
+    local_store_data = json.loads(base64.b64decode(data))
+    pprint(local_store_data)
+    return local_store_data
 
   local_store_data_before = str(local_store_data)
 
@@ -481,23 +562,22 @@ def add_nodes(node_to_add, node_to_add_nbrs, url, tapped_edge, local_store_times
 
 
 
-  ctx = dash.callback_context
-  if not ctx.triggered:
-    return dash.no_update
-  trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+
 
   if trigger_id == "add-node-signal":
     local_store_data["include"]["nodes"].append(node_to_add)
 
   elif trigger_id == "add-node-nbrs-signal":
-    print(f"Neighbouring nodes to {node_to_add_nbrs}")
+    print(__file__, f"Neighbouring nodes to {node_to_add_nbrs}")
     mg = get_wpu_connectome_nx()
     for n in mg.neighbors(node_to_add_nbrs):
-      print("Adding:")
+      print(__file__, "Adding:")
+      print(__file__)
       pprint(n)
       local_store_data["include"]["nodes"].append(n)
       esd = mg[node_to_add_nbrs][n]
       for ed in esd.values():
+        print(__file__)
         pprint(ed)
         local_store_data["include"]["edges"].append(ed["id"])
 
@@ -515,14 +595,14 @@ def add_nodes(node_to_add, node_to_add_nbrs, url, tapped_edge, local_store_times
       else:
         typed_name = f"{ntype}{name}"
 
-      #print(action, ntype, name, typed_name)
+      #print(__file__, action, ntype, name, typed_name)
       if action == "add":
         local_store_data["include"]["nodes"].append(typed_name)
         local_store_data["include"]["nodes"] == list(set(local_store_data["include"]["nodes"]))
 
 
 
-  elif trigger_id == "cytoscape-net":
+  elif trigger_id == "cytoscape-net" and type(local_store_data) == dict :
 
     if "highlight" not in local_store_data:
       local_store_data["highlight"] = {"edges": [], "nodes": []}
@@ -545,7 +625,7 @@ def add_nodes(node_to_add, node_to_add_nbrs, url, tapped_edge, local_store_times
 @app.callback(Output('local-store', 'clear_data'),
               Input('delete-local-storage-button', 'n_clicks'))
 def clear_data(n_clicks):
-  # Clears local data. No effect until browser window is refreshed.
+  # Clears local data
   return (n_clicks is not None and n_clicks > 0)
 
 
@@ -565,7 +645,7 @@ def node_selected(tapped_node, local_store_data):
           ]
         )
     ]
-    print(f"Neighbouring nodes to {tapped_node['name']}")
+    print(__file__, f"Neighbouring nodes to {tapped_node['name']}")
     mg = get_wpu_connectome_nx()
     edge_layouts = {}
     try:
@@ -599,7 +679,7 @@ def node_selected(tapped_node, local_store_data):
                  )
 
     except nx.exception.NetworkXError:
-      print("Node not in graph")
+      print(__file__, "Node not in graph")
 
     for elk in sorted(edge_layouts.keys()):
       for e in edge_layouts[elk]:
@@ -635,20 +715,20 @@ def add_type(node_text):
     State({'role': 'add-all-nbrs-data'}, 'children'),
   )
 def add_node_nbrs_click(add_all_neighbours_clicks, add_all_neighbours_data):
-  print("add_node_nbrs_click")
+
   ctx = dash.callback_context
   if not ctx.triggered:
     return dash.no_update
 
   button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-  print(button_id)
+  print(__file__, button_id)
 
   if add_all_neighbours_clicks is None or add_all_neighbours_clicks < 1:
     return dash.no_update
 
   if button_id == '{"role":"add-all-nbrs-button"}':
     if add_all_neighbours_data != "":
-      print(f"Add all neighbours to {add_all_neighbours_data}")
+      print(__file__, f"Add all neighbours to {add_all_neighbours_data}")
       return add_all_neighbours_data
 
   return dash.no_update
@@ -682,6 +762,7 @@ def expand_graph_area(button_clicks, is_hidden):
   else:
     return [True, "Visa wpu-artiklar", 11, 0]
 
+get_wpu_connectome_nx(skip_saved=False)
 server = app.server   # for gunicorn
 if __name__ == '__main__':
   app.run_server(host="0.0.0.0", port=5001, debug=True, dev_tools_hot_reload=True, dev_tools_hot_reload_interval=1, dev_tools_hot_reload_watch_interval=1, dev_tools_silence_routes_logging=True)
