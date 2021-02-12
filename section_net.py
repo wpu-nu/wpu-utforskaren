@@ -14,6 +14,7 @@ from html import unescape
 import datetime
 import urllib
 import base64
+import copy
 
 with open("styles.json", "rb") as file:
   stylesheet = json.load(file)
@@ -217,7 +218,8 @@ app.layout = dbc.Container(children=[
         className="m-0 p-2"
         ),
       dbc.Col([
-        dbc.Button("Dölj wpu-artiklar", id="hide-wpu-preview-button", className="btn btn-primary btn-sm m-1 p-1")
+        dbc.Button("Dölj wpu-artiklar", id="hide-wpu-preview-button", className="btn btn-primary btn-sm m-1 p-1"),
+        dbc.Button("Expandera alla noder", id="expand-all-nodes-button", className="btn btn-primary btn-sm m-1 p-1")
       ],
       width=1,
       className="m-0 p-2"
@@ -523,14 +525,18 @@ def display_cyto(hover_node, hover_edge, clear_data, timestamp, local_store_data
    Output(component_id='local-store', component_property='data'),
    [Input(component_id='add-node-signal', component_property='children'),
     Input(component_id='add-node-nbrs-signal', component_property='children'),
+    Input(component_id='expand-all-nodes-button', component_property='n_clicks'),
     Input(component_id='url', component_property='pathname'),
     Input(component_id='cytoscape-net', component_property='tapEdgeData'),
+    Input(component_id={'role': 'remove-node-button', 'dummy': ALL}, component_property='n_clicks'),
     Input(component_id='upload-network', component_property='contents'),
     Input(component_id='upload-network', component_property='last_modified')],
+    [
     State(component_id='local-store', component_property='modified_timestamp'),
-    State(component_id='local-store', component_property='data')
+    State(component_id='local-store', component_property='data'),
+    State(component_id={'role': 'add-all-nbrs-data', 'dummy': ALL}, component_property='children')]
    ) # @cache.memoize(timeout=7200)
-def add_nodes(node_to_add, node_to_add_nbrs, url, tapped_edge, uploaded_data, upload_timestamp, local_store_timestamp, local_store_data):
+def modify_network(node_to_add, node_to_add_nbrs, expand_all_nodes, url, tapped_edge, remove_node_button, uploaded_data, upload_timestamp, local_store_timestamp, local_store_data, node_to_remove):
 
   # Add nodes from various inputs, outputs to local store that in turn triggers display cyto
 
@@ -540,8 +546,8 @@ def add_nodes(node_to_add, node_to_add_nbrs, url, tapped_edge, uploaded_data, up
   trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
   trigger_prop = ctx.triggered[0]['prop_id'].split('.')[1]
 
-  print("add_nodes")
-  pprint(ctx)
+  print("modify_network")
+  print(trigger_id, trigger_prop)
   if trigger_id == "upload-network":
     print("Loading network from file")
     pprint(uploaded_data)
@@ -557,29 +563,53 @@ def add_nodes(node_to_add, node_to_add_nbrs, url, tapped_edge, uploaded_data, up
     local_store_data =  {"include": {"nodes": [], "edges": []}, "highlight": {"edges": [], "nodes": []}}
     return local_store_data
 
-  if node_to_add is None or local_store_timestamp is None or url is None or local_store_data is None:
-    raise PreventUpdate
+  if "remove-node-button" in trigger_id and remove_node_button != [None]:
+    trigger_id_json = json.loads(trigger_id)
+    if trigger_id_json["role"] == "remove-node-button":
+      if node_to_remove != "" and node_to_remove != [] and node_to_remove is not None:
+        if type(node_to_remove) == list:
+          node_to_remove = node_to_remove[0]
+        print("removing:")
+        pprint(node_to_remove)
+        local_store_data["include"]["nodes"] = [e for e in local_store_data["include"]["nodes"] if node_to_remove != e]
+        local_store_data["highlight"]["nodes"] = [e for e in local_store_data["highlight"]["nodes"] if node_to_remove != e]
 
+        local_store_data["include"]["edges"] = [e for e in local_store_data["include"]["edges"] if node_to_remove not in e]
+        local_store_data["highlight"]["edges"] = [e for e in local_store_data["highlight"]["edges"] if node_to_remove not in e]
 
+        return local_store_data
 
-
-
-  if trigger_id == "add-node-signal":
+  elif trigger_id == "add-node-signal":
     local_store_data["include"]["nodes"].append(node_to_add)
+    return local_store_data
 
   elif trigger_id == "add-node-nbrs-signal":
     print(__file__, f"Neighbouring nodes to {node_to_add_nbrs}")
     mg = get_wpu_connectome_nx()
     for n in mg.neighbors(node_to_add_nbrs):
       print(__file__, "Adding:")
-      print(__file__)
       pprint(n)
       local_store_data["include"]["nodes"].append(n)
       esd = mg[node_to_add_nbrs][n]
       for ed in esd.values():
-        print(__file__)
         pprint(ed)
         local_store_data["include"]["edges"].append(ed["id"])
+    return local_store_data
+
+  elif trigger_id == "expand-all-nodes-button" and expand_all_nodes is not None:
+    mg = get_wpu_connectome_nx()
+    orig_node_list = copy.copy(local_store_data["include"]["nodes"])
+    for node_in_dash in orig_node_list:
+      print("Processing")
+      pprint(node_in_dash)
+      for n in mg.neighbors(node_in_dash):
+        print(__file__, "Adding:")
+        pprint(n)
+        local_store_data["include"]["nodes"].append(n)
+        esd = mg[node_in_dash][n]
+        for ed in esd.values():
+          local_store_data["include"]["edges"].append(ed["id"])
+    return local_store_data
 
 
 
@@ -599,6 +629,7 @@ def add_nodes(node_to_add, node_to_add_nbrs, url, tapped_edge, uploaded_data, up
       if action == "add":
         local_store_data["include"]["nodes"].append(typed_name)
         local_store_data["include"]["nodes"] == list(set(local_store_data["include"]["nodes"]))
+        return local_store_data
 
 
 
@@ -640,8 +671,9 @@ def node_selected(tapped_node, local_store_data):
         children=[
           html.A(href=tapped_node["url"], target="_blank", children=html.H3(tapped_node["name"])),
           html.Br(),
-          html.Div(id={'role': "add-all-nbrs-data"}, hidden=True, children=tapped_node["id"]),
-          dbc.Button("Lägg till allt", className="btn-sm align-self-end", style={"padding": "2px"}, id={'role': 'add-all-nbrs-button'}),
+          dbc.Button("Ta bort", className="btn-sm btn-warning align-self-end", style={"padding": "2px"}, id={'role': 'remove-node-button', 'dummy': '<- im with stupid'}),
+          html.Div(id={'role': "add-all-nbrs-data", "dummy": "<- im with stupid"}, hidden=True, children=tapped_node["id"]),
+          dbc.Button("Lägg till allt", className="btn-sm align-self-end", style={"padding": "2px"}, id={'role': 'add-all-nbrs-button', 'dummy': '<- im with stupid'}),
           ]
         )
     ]
@@ -711,8 +743,8 @@ def add_type(node_text):
 
 
 @app.callback(Output('add-node-nbrs-signal', 'children'),
-    Input({'role': 'add-all-nbrs-button'}, 'n_clicks'),
-    State({'role': 'add-all-nbrs-data'}, 'children'),
+    Input({'role': 'add-all-nbrs-button', "dummy": ALL}, 'n_clicks'),
+    State({'role': 'add-all-nbrs-data', "dummy": ALL}, 'children'),
   )
 def add_node_nbrs_click(add_all_neighbours_clicks, add_all_neighbours_data):
 
@@ -723,10 +755,20 @@ def add_node_nbrs_click(add_all_neighbours_clicks, add_all_neighbours_data):
   button_id = ctx.triggered[0]['prop_id'].split('.')[0]
   print(__file__, button_id)
 
-  if add_all_neighbours_clicks is None or add_all_neighbours_clicks < 1:
-    return dash.no_update
+  if type(add_all_neighbours_clicks) == list and len(add_all_neighbours_clicks) > 0:
+    add_all_neighbours_clicks = add_all_neighbours_clicks[0]
 
-  if button_id == '{"role":"add-all-nbrs-button"}':
+  if type(add_all_neighbours_data) == list and len(add_all_neighbours_data) > 0:
+    add_all_neighbours_data = add_all_neighbours_data[0]
+
+
+  if "add-all-nbrs-button" in button_id:
+    button_id = json.loads(button_id)
+    if "role" in button_id and button_id["role"] == "export-image":
+
+      if add_all_neighbours_clicks is None or add_all_neighbours_clicks < 1:
+        return dash.no_update
+
     if add_all_neighbours_data != "":
       print(__file__, f"Add all neighbours to {add_all_neighbours_data}")
       return add_all_neighbours_data
